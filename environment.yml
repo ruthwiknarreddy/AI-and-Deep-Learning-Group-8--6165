@@ -1,0 +1,20 @@
+name: deeplearning
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12.3
+  - numpy=1.26.4
+  - scikit-learn=1.5.1
+  - pandas=2.2.0
+  - matplotlib=3.9.1
+  - jupyter
+  - pip
+  - graphviz
+  - pip:
+    - jupyterlab-rise
+    - tensorflow
+    - seaborn
+    - pydot
+
