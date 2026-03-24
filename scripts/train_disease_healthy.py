@@ -1,4 +1,4 @@
-from train_disease_healthy_utils import LoadDataset, show_img, plot_learning
+from train_disease_healthy_utils import LoadDataset, show_img, plot_learning, AlexNet, GoogLeNet, train_model
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -11,11 +11,18 @@ from torchvision.transforms import v2
 import os
 import pandas as pd
 import numpy as np
+import torchvision.models as models
+import torch.nn as nn
+import torch.optim as optim
+from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall, BinaryF1Score
+import argparse
 
 ## set working directory
 os.chdir(f"{os.path.expanduser('~')}/AI-and-Deep-Learning-Group-8--6165/")
 
-
+parser = argparse.ArgumentParser(prog = "Healthy vs Disease trainig")
+parser.add_argument("-ts", "--test_size")
+args = parser.parse_args()
 
 if __name__ == "__main__":
     ### read in the label df ###
@@ -26,21 +33,26 @@ if __name__ == "__main__":
     ## There are  43784 disease samples.
     ## approx. 20%-80% healthy-disease split
     ## Split instances into majority vs minority class/classes
-    df_majority = label_df[label_df["label_binary"] == 'disease']
-    df_minority = label_df[label_df["label_binary"] == 'healthy']
+    # df_majority = label_df[label_df["label_binary"] == 'disease']
+    # df_minority = label_df[label_df["label_binary"] == 'healthy']
 
     # Undersampling majority class: so there is a 40%-60% healthy-disease split
     ## https://machinelearningmastery.com/navigating-imbalanced-datasets-with-pandas-and-scikit-learn/
 
     ## calculate number of desired majority class samples: Maj / (Maj+Min) = 0.6 --> round(.6*Min/.4) 
-    df_majority_downsampled = df_majority.sample(n=int(.6/.4*len(df_minority)), random_state=42)
-    df_balanced = pd.concat([df_majority_downsampled, df_minority])
+    # df_majority_downsampled = df_majority.sample(n=int(.6/.4*len(df_minority)), random_state=42)
+    # df_balanced = pd.concat([df_majority_downsampled, df_minority])
 
-    print(f"Original dataset: {len(label_df)}")
-    print(f"Balanced dataset: {len(df_balanced)}") ## 38817 samples, 15527 from disease and 23290 from healthy
+    # print(f"Original dataset: {len(label_df)}")
+    # print(f"Balanced dataset: {len(df_balanced)}") ## 38817 samples, 15527 from disease and 23290 from healthy
 
+    classes = {0:"disease", 1:"healthy"}
 
-    train_df, temp_df = train_test_split(df_balanced, test_size=0.3, stratify=df_balanced['label_binary'], random_state=0)
+    #### troubleshooting dataset with fewer instances ########
+    # throwaway, df_balanced = train_test_split(df_balanced, test_size=0.1, stratify=df_balanced['label_binary'], random_state=0)
+
+    # train_df, temp_df = train_test_split(df_balanced, test_size=float(args.test_size), stratify=df_balanced['label_binary'], random_state=0)
+    train_df, temp_df = train_test_split(label_df, test_size=float(args.test_size), stratify=label_df['label_binary'], random_state=0)
     val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df['label_binary'], random_state=0)
 
 
@@ -62,7 +74,7 @@ if __name__ == "__main__":
     for i, sample_label in enumerate(train):
         if i < 10:
             plt.subplot(2,5,i+1)
-            show_img(sample_label[0].permute(1, 2, 0).numpy(), sample_label[1])
+            show_img(sample_label[0].permute(1, 2, 0).numpy(), classes[sample_label[1]])
         else:
             break
     plt.show()
@@ -107,15 +119,44 @@ if __name__ == "__main__":
             break
     plt.savefig("./healthy_disease/output/images/preliminary_augment_data.png")
 
+    
 
-    ######################################
-    #### import the pretrained models ####
-    ######################################
+    #####################################
+    #### train the pretrained models ####
+    #####################################
 
-    retrain = True
-
+    #################
     #### AlexNet ####
+    #################
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    alexnet = AlexNet(retrain = True)
+    alexnet.model = alexnet.model.to(device)
+    criterion = nn.BCEWithLogitsLoss() ## loss
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, alexnet.model.parameters()), ## don't pass frozen parameters
+                            lr=0.001)
 
 
-    #### GoogleNet aka InceptionNet V1. ####
+    train_model(train_data = train, valid_data = valid, model_class = alexnet, criterion = criterion, optimizer = optimizer, epochs = 30,
+                output_model_path = f"./healthy_disease/models/alexnet_model_test-size_{args.test_size}.pt",
+                train_history_path = f"./healthy_disease/output/train_test_results/alexnet_train_history_test-size_{args.test_size}.csv", 
+                valid_history_path = f"./healthy_disease/output/train_test_results/alexnet_valid_history_test-size_{args.test_size}.csv")
+
+
+    
+
+
+    ########################################
+    #### GoogLeNet aka InceptionNet V1. ####
+    ########################################
+    googlenet = GoogLeNet(retrain = True)
+    googlenet.model = googlenet.model.to(device)
+    criterion = nn.BCEWithLogitsLoss() ## loss
+    optimizer = optim.Adam(googlenet.model.fc.parameters(), ## don't pass frozen parameters
+                            lr=0.001)
+    
+    train_model(train_data = train, valid_data = valid, model_class = googlenet, criterion = criterion, optimizer = optimizer, epochs = 30,
+            output_model_path = f"./healthy_disease/models/googlenet_model_test-size_{args.test_size}.pt",
+            train_history_path = f"./healthy_disease/output/train_test_results/googlenet_train_history_test-size_{args.test_size}.csv", 
+            valid_history_path = f"./healthy_disease/output/train_test_results/googlenet_valid_history_test-size_{args.test_size}.csv")
+
 

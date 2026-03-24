@@ -23,7 +23,12 @@ from PIL import Image
 import torchvision.models as models
 import torch.nn as nn
 import torch.optim as optim
-from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall, BinaryF1Score
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassF1Score,
+    MulticlassPrecision,
+    MulticlassRecall
+)
 
 ## set working directory
 os.chdir(f"{os.path.expanduser('~')}/AI-and-Deep-Learning-Group-8--6165/")
@@ -40,6 +45,7 @@ class LoadDataset(Dataset):
                 on a sample.
         """
         self.df = df
+        self.classes = {disease: i for i, disease in enumerate(df["disease_label"].unique())}
         self.transform = transform
 
     def __len__(self):
@@ -47,11 +53,8 @@ class LoadDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.df.iloc[idx]["files"]
-        label = self.df.iloc[idx]["label_binary"]
-        if label == "healthy":
-            label = 1
-        else:
-            label = 0
+        label = self.df.iloc[idx]["disease_label"]
+        label = self.classes[label]
 
         image = Image.open(img_path).convert("RGB")
 
@@ -101,7 +104,7 @@ class AlexNet(torch.nn.Module):
                 parameter.requires_grad = False
 
 
-            self.model.classifier[-1] = nn.Linear(4096, 1)
+            self.model.classifier[-1] = nn.Linear(4096, 33)
             for layer in self.model.classifier[-3:]:
                 for param in layer.parameters(): ## train the last two layers
                     param.requires_grad = True
@@ -112,13 +115,12 @@ class AlexNet(torch.nn.Module):
 
       
     def predict(self, data, labels):
-        criterion = nn.BCEWithLogitsLoss()
+        criterion = nn.CrossEntropyLoss()
         output_logits = self.model(data)#.squeeze()
         # print("logits shape: ",output_logits.shape)
         # print("labels shape: ",labels.shape)
-        probs = torch.sigmoid(output_logits)
         loss = criterion(output_logits, labels.float())
-        return loss, (probs > 0.5).type(torch.int32)
+        return loss, torch.argmax(output_logits, dim=1)
       
     
     
@@ -138,7 +140,7 @@ class GoogLeNet(torch.nn.Module):
             fc_layers = nn.Sequential(OrderedDict([
                         ('fc1', nn.Linear(1024, 500)),
                         ('relu', nn.ReLU()),
-                        ('fc2', nn.Linear(500, 1))
+                        ('fc2', nn.Linear(500, 33))
                         ]))
             self.model.fc = fc_layers
 
@@ -148,26 +150,28 @@ class GoogLeNet(torch.nn.Module):
 
     
     def predict(self, data, labels):
-        criterion = nn.BCEWithLogitsLoss()
+        criterion = nn.CrossEntropyLoss()
         output_logits = self.model(data)#.squeeze()
-        probs = torch.sigmoid(output_logits)
+        probs = torch.softmax(output_logits)
         loss = criterion(output_logits, labels.float())
         return loss, (probs > 0.5).type(torch.int32)
 
 
 def train_model(train_data, valid_data, model_class, optimizer, criterion,
                 output_model_path: str, train_history_path: str, valid_history_path: str, epochs = 2):
-
+    
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-
+    num_classes = 33
+    
     train_history = {"loss": [], "accuracy": [], "F1": [], "recall": [], "precision": []}
     valid_history = {"loss": [], "accuracy": [], "F1": [], "recall": [], "precision": []}
 
-    accuracy = BinaryAccuracy().to(device)
-    F1 = BinaryF1Score().to(device)
-    precision = BinaryPrecision().to(device)
-    recall = BinaryRecall().to(device)
+    accuracy = MulticlassAccuracy(num_classes=num_classes, average = "weighted").to(device)
+    F1 = MulticlassF1Score(num_classes=num_classes, average = "weighted").to(device)
+    precision = MulticlassPrecision(num_classes=num_classes, average = "weighted").to(device)
+    recall = MulticlassRecall(num_classes=num_classes, average = "weighted").to(device)
 
     batched_train = DataLoader(train_data, batch_size=64, shuffle=True)
     batched_valid = DataLoader(valid_data, batch_size=64, shuffle=False)
@@ -199,8 +203,8 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
             optimizer.step()
 
             ## make predictions and compute metrics
-            probs = torch.sigmoid(output_logits)
-            preds = (probs > 0.5).type(torch.int32)
+            probs = torch.softmax(output_logits, dim=1)
+            max_probs, preds = torch.max(probs, dim=1)
 
             accuracy(preds, labels)
             F1(preds, labels)
@@ -229,10 +233,6 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
                 labels = labels.int().unsqueeze(1)
 
                 ## predict validation data after each epoch
-
-                # print("images shape:", images.shape)
-                # if images.dim() == 3:
-                #     images = images.unsqueeze(0)
                 
                 batch_loss, preds = model_class.predict(images, labels)
                 valid_loss += batch_loss.item()
