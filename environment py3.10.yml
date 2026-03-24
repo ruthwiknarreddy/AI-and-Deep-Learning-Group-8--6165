@@ -4,8 +4,8 @@ channels:
   - conda-forge
 
 dependencies:
-  - python=3.12.3
-  - numpy=1.26.4
+  - python=3.10
+  - numpy=1.24.3
   - scikit-learn=1.5.1
   - pandas=2.2.0
   - matplotlib=3.9.1
@@ -13,9 +13,11 @@ dependencies:
   - pip
   - graphviz
   - pip:
-    - jupyterlab-rise
-    - tensorflow
+    - tensorflow==2.13
+    - tensorflow-probability==0.21
     - seaborn
     - pydot
-    - torchmetrics
+    - torch
     - torchvision
+    - onnx==1.14.1
+    - onnx-tf==1.10.0
