@@ -16,7 +16,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall, BinaryF1Score
 import argparse
-import pickle
 
 ## set working directory
 os.chdir(f"{os.path.expanduser('~')}/AI-and-Deep-Learning-Group-8--6165/")
@@ -30,6 +29,7 @@ if __name__ == "__main__":
     label_df = pd.read_csv("./dataset/dataset_split.csv").loc[:,["files","disease_label"]].dropna(axis=0)
 
 
+    classes = {i: disease for i, disease in enumerate(label_df["disease_label"].unique())}
 
     #### troubleshooting dataset with fewer instances ########
     # throwaway, label_df = train_test_split(label_df, test_size=0.1, stratify=label_df['disease_label'], random_state=0)
@@ -38,39 +38,18 @@ if __name__ == "__main__":
     train_df, temp_df = train_test_split(label_df, test_size=float(args.test_size), stratify=label_df['disease_label'], random_state=0)
     val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df['disease_label'], random_state=0)
 
-    print(f"There are {len(label_df['disease_label'].unique())} classes in the full dataset.")
-    print(f"There are {len(train_df['disease_label'].unique())} classes in the train dataset.")
-    print(f"There are {len(val_df['disease_label'].unique())} classes in the validation dataset.")
-
-    ## save the class-index mapping dict so it can be used on the testing data ##
-    if not os.path.isfile("./dataset/disease_type_labels.pkl"):
-        classes = {disease: i for i, disease in enumerate(label_df["disease_label"].unique())}
-        with open("./dataset/disease_type_labels.pkl", "wb") as file:
-            pickle.dump(classes, file)
-
-    else:
-        with open("./dataset/disease_type_labels.pkl", "rb") as file:
-            classes = pickle.load(file)
-
-
-    ####################################
-    #### Preliminary Visualizations ####
-    ####################################
-
 
     ## resize images to 224x224 and rescale images to [0,1]
-    transform = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    ])  
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),  # automatically scales to [0,1]
+    ])
 
     ### image generator
-    train = LoadDataset(train_df, {disease: i for i, disease in enumerate(label_df["disease_label"].unique())}, transform=transform)
+    train = LoadDataset(train_df, transform=transform)
+    valid   = LoadDataset(val_df, transform=transform)
+    test  = LoadDataset(test_df, transform=transform)
 
-
-    #### see images after augmentation ####
-    reverse_classes = {i: disease for i, disease in enumerate(label_df["disease_label"].unique())}
 
 
     #### plot the images ####
@@ -78,11 +57,11 @@ if __name__ == "__main__":
     for i, sample_label in enumerate(train):
         if i < 10:
             plt.subplot(2,5,i+1)
-            if len(reverse_classes[sample_label[1]]) > 30:
-                label = "\n(".join(reverse_classes[sample_label[1]].split("("))
+            if len(classes[sample_label[1]]) > 30:
+                label = "\n(".join(classes[sample_label[1]].split("("))
                 label = ")\n".join(label.split(")"))
             else:
-                label = reverse_classes[sample_label[1]]
+                label = classes[sample_label[1]]
 
             show_img(sample_label[0].permute(1, 2, 0).numpy(), label)
         else:
@@ -99,13 +78,13 @@ if __name__ == "__main__":
         transforms.v2.RandomVerticalFlip(p=0.5),
         transforms.v2.RandomRotation(degrees = (-.1,.1)),
         #transforms.v2.RandomZoomOut(p=.5),
-        transforms.v2.RandomApply([transforms.v2.ColorJitter(brightness = 0.1, contrast = 0.1,
-                                saturation = 0.1, hue = 0.1)], p = 0.4)
+        transforms.v2.ColorJitter(brightness = (.5,1), contrast = 0.1,
+                                saturation = 0.1, hue = 0.1)
     ])
 
 
 
-
+    #### see images after augmentation ####
     plt.figure(figsize=(10, 10))
 
     for i, image_label in enumerate(train):
@@ -127,55 +106,22 @@ if __name__ == "__main__":
             break
     plt.savefig("./disease_type/output/images/preliminary_augment_data.png")
 
-
+    ##### augment training data #####
+    train = data_augmentation(train)    
 
     #####################################
     #### train the pretrained models ####
     #####################################
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # classes = {disease: i for i, disease in enumerate(label_df["disease_label"].unique())}
-
-
     #################
     #### AlexNet ####
     #################
-
-    ##### Full augmentation #####
-    mean = [0.485, 0.456, 0.406]
-    std  = [0.229, 0.224, 0.225]    
-
-
-    transform_train = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    transforms.v2.RandomHorizontalFlip(p=0.5),
-    transforms.v2.RandomVerticalFlip(p=0.5),
-    transforms.v2.RandomRotation(degrees = (-.1,.1)),
-    transforms.v2.RandomApply([transforms.v2.ColorJitter(brightness = 0.1, contrast = 0.1,
-        saturation = 0.1, hue = 0.1)], p = 0.4),
-    transforms.v2.Normalize(mean, std)
-    ])   
-
-    transform_valid = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    transforms.v2.Normalize(mean, std)
-    ])  
-
-    ### image generator
-    train = LoadDataset(train_df, classes, transform=transform_train)
-    valid   = LoadDataset(val_df, classes, transform=transform_valid)
-
-
-    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     alexnet = AlexNet(retrain = True)
     alexnet.model = alexnet.model.to(device)
     criterion = nn.CrossEntropyLoss() ## loss
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, alexnet.model.parameters()), ## don't pass frozen parameters
-                            lr=0.0001)
+                            lr=0.001)
 
 
     train_model(train_data = train, valid_data = valid, model_class = alexnet, criterion = criterion, optimizer = optimizer, epochs = 30,
@@ -184,46 +130,21 @@ if __name__ == "__main__":
                 valid_history_path = f"./disease_type/output/train_test_results/alexnet_valid_history_test-size_{args.test_size}.csv")
 
 
-
+    
 
 
     ########################################
     #### GoogLeNet aka InceptionNet V1. ####
     ########################################
-
-    #############################
-    ##### Full augmentation #####
-    ############################# 
-
-
-    transform_train = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    transforms.v2.RandomHorizontalFlip(p=0.5),
-    transforms.v2.RandomVerticalFlip(p=0.5),
-    transforms.v2.RandomRotation(degrees = (-.1,.1)),
-    transforms.v2.RandomApply([transforms.v2.ColorJitter(brightness = 0.1, contrast = 0.1,
-        saturation = 0.1, hue = 0.1)], p = 0.4)
-    ])   
-
-    transform_valid = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    ])  
-
-    ### image generator
-    train = LoadDataset(train_df, classes, transform=transform_train)
-    valid   = LoadDataset(val_df, classes, transform=transform_valid)
-
     googlenet = GoogLeNet(retrain = True)
     googlenet.model = googlenet.model.to(device)
     criterion = nn.CrossEntropyLoss() ## loss
     optimizer = optim.Adam(googlenet.model.fc.parameters(), ## don't pass frozen parameters
-                            lr=0.0001)
+                            lr=0.001)
     
     train_model(train_data = train, valid_data = valid, model_class = googlenet, criterion = criterion, optimizer = optimizer, epochs = 30,
             output_model_path = f"./disease_type/models/googlenet_model_test-size_{args.test_size}.pt",
             train_history_path = f"./disease_type/output/train_test_results/googlenet_train_history_test-size_{args.test_size}.csv", 
             valid_history_path = f"./disease_type/output/train_test_results/googlenet_valid_history_test-size_{args.test_size}.csv")
+
+

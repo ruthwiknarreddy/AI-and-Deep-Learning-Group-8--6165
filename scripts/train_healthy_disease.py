@@ -1,4 +1,4 @@
-from train_disease_type_utils import LoadDataset, show_img, plot_learning, AlexNet, GoogLeNet, train_model
+from train_healthy_disease_utils import LoadDataset, show_img, plot_learning, AlexNet, GoogLeNet, train_model
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -16,47 +16,49 @@ import torch.nn as nn
 import torch.optim as optim
 from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall, BinaryF1Score
 import argparse
-import pickle
 
 ## set working directory
 os.chdir(f"{os.path.expanduser('~')}/AI-and-Deep-Learning-Group-8--6165/")
 
-parser = argparse.ArgumentParser(prog = "Disease type training")
+parser = argparse.ArgumentParser(prog = "Healthy vs Disease trainig")
 parser.add_argument("-ts", "--test_size")
 args = parser.parse_args()
 
 if __name__ == "__main__":
     ### read in the label df ###
-    label_df = pd.read_csv("./dataset/dataset_split.csv").loc[:,["files","disease_label"]].dropna(axis=0)
+    label_df = pd.read_csv("./dataset/dataset_split.csv").loc[:,["files","label_binary"]]
 
+    ## train_test_validation split, the dataset is unbalanced
+    ## There are  15527 healthy samples.
+    ## There are  43784 disease samples.
+    ## approx. 20%-80% healthy-disease split
+    ## Split instances into majority vs minority class/classes
+    # df_majority = label_df[label_df["label_binary"] == 'disease']
+    # df_minority = label_df[label_df["label_binary"] == 'healthy']
 
+    # Undersampling majority class: so there is a 40%-60% healthy-disease split
+    ## https://machinelearningmastery.com/navigating-imbalanced-datasets-with-pandas-and-scikit-learn/
+
+    ## calculate number of desired majority class samples: Maj / (Maj+Min) = 0.6 --> round(.6*Min/.4) 
+    # df_majority_downsampled = df_majority.sample(n=int(.6/.4*len(df_minority)), random_state=42)
+    # df_balanced = pd.concat([df_majority_downsampled, df_minority])
+
+    # print(f"Original dataset: {len(label_df)}")
+    # print(f"Balanced dataset: {len(df_balanced)}") ## 38817 samples, 15527 from disease and 23290 from healthy
+
+    classes = {0:"disease", 1:"healthy"}
 
     #### troubleshooting dataset with fewer instances ########
-    # throwaway, label_df = train_test_split(label_df, test_size=0.1, stratify=label_df['disease_label'], random_state=0)
+    # throwaway, df_balanced = train_test_split(df_balanced, test_size=0.1, stratify=df_balanced['label_binary'], random_state=0)
 
     # train_df, temp_df = train_test_split(df_balanced, test_size=float(args.test_size), stratify=df_balanced['label_binary'], random_state=0)
-    train_df, temp_df = train_test_split(label_df, test_size=float(args.test_size), stratify=label_df['disease_label'], random_state=0)
-    val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df['disease_label'], random_state=0)
-
-    print(f"There are {len(label_df['disease_label'].unique())} classes in the full dataset.")
-    print(f"There are {len(train_df['disease_label'].unique())} classes in the train dataset.")
-    print(f"There are {len(val_df['disease_label'].unique())} classes in the validation dataset.")
-
-    ## save the class-index mapping dict so it can be used on the testing data ##
-    if not os.path.isfile("./dataset/disease_type_labels.pkl"):
-        classes = {disease: i for i, disease in enumerate(label_df["disease_label"].unique())}
-        with open("./dataset/disease_type_labels.pkl", "wb") as file:
-            pickle.dump(classes, file)
-
-    else:
-        with open("./dataset/disease_type_labels.pkl", "rb") as file:
-            classes = pickle.load(file)
+    train_df, temp_df = train_test_split(label_df, test_size=float(args.test_size), stratify=label_df['label_binary'], random_state=0)
+    val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df['label_binary'], random_state=0)
 
 
     ####################################
     #### Preliminary Visualizations ####
     ####################################
-
 
     ## resize images to 224x224 and rescale images to [0,1]
     transform = v2.Compose([
@@ -66,11 +68,9 @@ if __name__ == "__main__":
     ])  
 
     ### image generator
-    train = LoadDataset(train_df, {disease: i for i, disease in enumerate(label_df["disease_label"].unique())}, transform=transform)
-
-
-    #### see images after augmentation ####
-    reverse_classes = {i: disease for i, disease in enumerate(label_df["disease_label"].unique())}
+    train = LoadDataset(train_df, transform=transform)
+    valid   = LoadDataset(val_df, transform=transform)
+    # test  = LoadDataset(test_df, transform=transform)
 
 
     #### plot the images ####
@@ -78,17 +78,13 @@ if __name__ == "__main__":
     for i, sample_label in enumerate(train):
         if i < 10:
             plt.subplot(2,5,i+1)
-            if len(reverse_classes[sample_label[1]]) > 30:
-                label = "\n(".join(reverse_classes[sample_label[1]].split("("))
-                label = ")\n".join(label.split(")"))
-            else:
-                label = reverse_classes[sample_label[1]]
-
-            show_img(sample_label[0].permute(1, 2, 0).numpy(), label)
+            show_img(sample_label[0].permute(1, 2, 0).numpy(), classes[sample_label[1]])
         else:
             break
-    plt.tight_layout(h_pad=2.0, w_pad=4)
-    plt.savefig("./disease_type/output/images/preliminary_data.png")
+    plt.show()
+
+    plt.tight_layout()
+    plt.savefig("./healthy_disease/output/images/preliminary_data.png")
 
 
 
@@ -98,14 +94,13 @@ if __name__ == "__main__":
         transforms.v2.RandomHorizontalFlip(p=0.5),
         transforms.v2.RandomVerticalFlip(p=0.5),
         transforms.v2.RandomRotation(degrees = (-.1,.1)),
-        #transforms.v2.RandomZoomOut(p=.5),
         transforms.v2.RandomApply([transforms.v2.ColorJitter(brightness = 0.1, contrast = 0.1,
                                 saturation = 0.1, hue = 0.1)], p = 0.4)
     ])
 
 
 
-
+    #### see images after augmentation ####
     plt.figure(figsize=(10, 10))
 
     for i, image_label in enumerate(train):
@@ -125,23 +120,23 @@ if __name__ == "__main__":
         plt.tight_layout()
         if i != 1:
             break
-    plt.savefig("./disease_type/output/images/preliminary_augment_data.png")
+    plt.savefig("./healthy_disease/output/images/preliminary_augment_data.png")
 
 
+
+    
 
     #####################################
     #### train the pretrained models ####
     #####################################
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # classes = {disease: i for i, disease in enumerate(label_df["disease_label"].unique())}
-
-
     #################
     #### AlexNet ####
     #################
 
+    #############################
     ##### Full augmentation #####
+    #############################
     mean = [0.485, 0.456, 0.406]
     std  = [0.229, 0.224, 0.225]    
 
@@ -149,13 +144,13 @@ if __name__ == "__main__":
     transform_train = v2.Compose([
     transforms.v2.Resize((224, 224)),
     transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
+    transforms.v2.ToDtype(torch.float32, scale=True), ## scale between [0,1]
     transforms.v2.RandomHorizontalFlip(p=0.5),
     transforms.v2.RandomVerticalFlip(p=0.5),
     transforms.v2.RandomRotation(degrees = (-.1,.1)),
     transforms.v2.RandomApply([transforms.v2.ColorJitter(brightness = 0.1, contrast = 0.1,
         saturation = 0.1, hue = 0.1)], p = 0.4),
-    transforms.v2.Normalize(mean, std)
+    transforms.v2.Normalize(mean, std),
     ])   
 
     transform_valid = v2.Compose([
@@ -166,25 +161,25 @@ if __name__ == "__main__":
     ])  
 
     ### image generator
-    train = LoadDataset(train_df, classes, transform=transform_train)
-    valid   = LoadDataset(val_df, classes, transform=transform_valid)
+    train = LoadDataset(train_df, transform=transform_train)
+    valid = LoadDataset(val_df, transform=transform_valid)
 
 
-    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     alexnet = AlexNet(retrain = True)
     alexnet.model = alexnet.model.to(device)
-    criterion = nn.CrossEntropyLoss() ## loss
+    criterion = nn.BCEWithLogitsLoss() ## loss
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, alexnet.model.parameters()), ## don't pass frozen parameters
-                            lr=0.0001)
+                            lr=0.001)
 
 
     train_model(train_data = train, valid_data = valid, model_class = alexnet, criterion = criterion, optimizer = optimizer, epochs = 30,
-                output_model_path = f"./disease_type/models/alexnet_model_test-size_{args.test_size}.pt",
-                train_history_path = f"./disease_type/output/train_test_results/alexnet_train_history_test-size_{args.test_size}.csv", 
-                valid_history_path = f"./disease_type/output/train_test_results/alexnet_valid_history_test-size_{args.test_size}.csv")
+                output_model_path = f"./healthy_disease/models/alexnet_model_test-size_{args.test_size}.pt",
+                train_history_path = f"./healthy_disease/output/train_test_results/alexnet_train_history_test-size_{args.test_size}.csv", 
+                valid_history_path = f"./healthy_disease/output/train_test_results/alexnet_valid_history_test-size_{args.test_size}.csv")
 
 
-
+    
 
 
     ########################################
@@ -193,7 +188,7 @@ if __name__ == "__main__":
 
     #############################
     ##### Full augmentation #####
-    ############################# 
+    #############################
 
 
     transform_train = v2.Compose([
@@ -204,7 +199,8 @@ if __name__ == "__main__":
     transforms.v2.RandomVerticalFlip(p=0.5),
     transforms.v2.RandomRotation(degrees = (-.1,.1)),
     transforms.v2.RandomApply([transforms.v2.ColorJitter(brightness = 0.1, contrast = 0.1,
-        saturation = 0.1, hue = 0.1)], p = 0.4)
+                    saturation = 0.1, hue = 0.1)], p = 0.4)
+                            
     ])   
 
     transform_valid = v2.Compose([
@@ -214,16 +210,19 @@ if __name__ == "__main__":
     ])  
 
     ### image generator
-    train = LoadDataset(train_df, classes, transform=transform_train)
-    valid   = LoadDataset(val_df, classes, transform=transform_valid)
+    train = LoadDataset(train_df, transform=transform_train)
+    valid   = LoadDataset(val_df, transform=transform_valid)
+
 
     googlenet = GoogLeNet(retrain = True)
     googlenet.model = googlenet.model.to(device)
-    criterion = nn.CrossEntropyLoss() ## loss
+    criterion = nn.BCEWithLogitsLoss() ## loss
     optimizer = optim.Adam(googlenet.model.fc.parameters(), ## don't pass frozen parameters
-                            lr=0.0001)
+                            lr=0.001)
     
     train_model(train_data = train, valid_data = valid, model_class = googlenet, criterion = criterion, optimizer = optimizer, epochs = 30,
-            output_model_path = f"./disease_type/models/googlenet_model_test-size_{args.test_size}.pt",
-            train_history_path = f"./disease_type/output/train_test_results/googlenet_train_history_test-size_{args.test_size}.csv", 
-            valid_history_path = f"./disease_type/output/train_test_results/googlenet_valid_history_test-size_{args.test_size}.csv")
+            output_model_path = f"./healthy_disease/models/googlenet_model_test-size_{args.test_size}.pt",
+            train_history_path = f"./healthy_disease/output/train_test_results/googlenet_train_history_test-size_{args.test_size}.csv", 
+            valid_history_path = f"./healthy_disease/output/train_test_results/googlenet_valid_history_test-size_{args.test_size}.csv")
+
+

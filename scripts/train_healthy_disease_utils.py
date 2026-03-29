@@ -23,13 +23,7 @@ from PIL import Image
 import torchvision.models as models
 import torch.nn as nn
 import torch.optim as optim
-from torchmetrics.classification import (
-    MulticlassAccuracy,
-    MulticlassF1Score,
-    MulticlassPrecision,
-    MulticlassRecall
-)
-from torchvision.transforms import v2
+from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall, BinaryF1Score
 
 ## set working directory
 os.chdir(f"{os.path.expanduser('~')}/AI-and-Deep-Learning-Group-8--6165/")
@@ -38,7 +32,7 @@ os.chdir(f"{os.path.expanduser('~')}/AI-and-Deep-Learning-Group-8--6165/")
 class LoadDataset(Dataset):
     """Load dataset."""
 
-    def __init__(self, df, classes, transform=None):
+    def __init__(self, df, transform=None):
         """
         Args:
             csv_file (string): Path to the csv file with images.
@@ -46,7 +40,6 @@ class LoadDataset(Dataset):
                 on a sample.
         """
         self.df = df
-        self.classes = classes
         self.transform = transform
 
     def __len__(self):
@@ -54,8 +47,11 @@ class LoadDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.df.iloc[idx]["files"]
-        label = self.df.iloc[idx]["disease_label"]
-        label = self.classes[label]
+        label = self.df.iloc[idx]["label_binary"]
+        if label == "healthy":
+            label = 1
+        else:
+            label = 0
 
         image = Image.open(img_path).convert("RGB")
 
@@ -105,7 +101,7 @@ class AlexNet(torch.nn.Module):
                 parameter.requires_grad = False
 
 
-            self.model.classifier[-1] = nn.Linear(4096, 33)
+            self.model.classifier[-1] = nn.Linear(4096, 1)
             for layer in self.model.classifier[-3:]:
                 for param in layer.parameters(): ## train the last two layers
                     param.requires_grad = True
@@ -116,10 +112,13 @@ class AlexNet(torch.nn.Module):
 
       
     def predict(self, data, labels):
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.BCEWithLogitsLoss()
         output_logits = self.model(data)#.squeeze()
-        loss = criterion(output_logits, labels)
-        return loss, torch.argmax(output_logits, dim=1) ## largest logit is largest softmax
+        # print("logits shape: ",output_logits.shape)
+        # print("labels shape: ",labels.shape)
+        probs = torch.sigmoid(output_logits)
+        loss = criterion(output_logits, labels.float())
+        return loss, (probs > 0.5).type(torch.int32)
       
     
     
@@ -139,7 +138,7 @@ class GoogLeNet(torch.nn.Module):
             fc_layers = nn.Sequential(OrderedDict([
                         ('fc1', nn.Linear(1024, 500)),
                         ('relu', nn.ReLU()),
-                        ('fc2', nn.Linear(500, 33))
+                        ('fc2', nn.Linear(500, 1))
                         ]))
             self.model.fc = fc_layers
 
@@ -149,29 +148,27 @@ class GoogLeNet(torch.nn.Module):
 
     
     def predict(self, data, labels):
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.BCEWithLogitsLoss()
         output_logits = self.model(data)#.squeeze()
-        loss = criterion(output_logits, labels)
-        return loss, torch.argmax(output_logits, dim=1)
+        probs = torch.sigmoid(output_logits)
+        loss = criterion(output_logits, labels.float())
+        return loss, (probs > 0.5).type(torch.int32)
 
 
 def train_model(train_data, valid_data, model_class, optimizer, criterion,
                 output_model_path: str, train_history_path: str, valid_history_path: str, epochs = 2):
-    
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     model_class.model.to(device)
-
-    num_classes = 33
     
     train_history = {"loss": [], "accuracy": [], "F1": [], "recall": [], "precision": []}
     valid_history = {"loss": [], "accuracy": [], "F1": [], "recall": [], "precision": []}
 
-    accuracy = MulticlassAccuracy(num_classes=num_classes, average = "weighted").to(device)
-    F1 = MulticlassF1Score(num_classes=num_classes, average = "weighted").to(device)
-    precision = MulticlassPrecision(num_classes=num_classes, average = "weighted").to(device)
-    recall = MulticlassRecall(num_classes=num_classes, average = "weighted").to(device)
+    accuracy = BinaryAccuracy().to(device)
+    F1 = BinaryF1Score().to(device)
+    precision = BinaryPrecision().to(device)
+    recall = BinaryRecall().to(device)
 
     batched_train = DataLoader(train_data, batch_size=64, shuffle=True)
     batched_valid = DataLoader(valid_data, batch_size=64, shuffle=False)
@@ -187,13 +184,11 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
         for batch in batched_train:
             images, labels = batch
             images, labels = images.to(device), labels.to(device)
-            labels = labels.long()
-            
-            # print(images.shape, labels.shape)
+            labels = labels.int()
 
             # 1. Forward pass: Compute predicted y by passing inputs to the model
-            output_logits = model_class.model(images)#.squeeze() ## images
-            loss = criterion(output_logits, labels)
+            output_logits = model_class.model(images).squeeze() ## images
+            loss = criterion(output_logits, labels.float())
             train_loss += loss.item() ## loss for each epoch
 
             # 2. Zero the parameter gradients
@@ -206,8 +201,8 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
             optimizer.step()
 
             ## make predictions and compute metrics
-            probs = torch.softmax(output_logits, dim=1)
-            max_probs, preds = torch.max(probs, dim=1)
+            probs = torch.sigmoid(output_logits)
+            preds = (probs > 0.5).type(torch.int32)
 
             accuracy(preds, labels)
             F1(preds, labels)
@@ -221,7 +216,7 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
         train_history["loss"].append(train_loss/len(batched_train))
 
         #### report training ####
-        print(f"############################### Training Epoch: {EPOCH} of {epochs} done ###############################")
+        print(f"############################### Training Epoch: {EPOCH} of 30 done ###############################")
         for key, value in train_history.items(): print(f"############################### {key}: {value[-1]} ###############################")
 
 
@@ -233,11 +228,13 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
             for batch in batched_valid:
                 images, labels = batch
                 images, labels = images.to(device), labels.to(device)
-                labels = labels.long()
-
-                # print(images.shape, labels.shape)
+                labels = labels.int().unsqueeze(1)
 
                 ## predict validation data after each epoch
+
+                # print("images shape:", images.shape)
+                # if images.dim() == 3:
+                #     images = images.unsqueeze(0)
                 
                 batch_loss, preds = model_class.predict(images, labels)
                 valid_loss += batch_loss.item()
@@ -254,7 +251,7 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
             valid_history["precision"].append(precision.compute().item())
             valid_history["recall"].append(recall.compute().item())
             valid_history["loss"].append(valid_loss/len(batched_valid))
-            print(f"\n############################### Valid Epoch: {EPOCH} of {epochs} done ###############################")
+            print(f"\n############################### Valid Epoch: {EPOCH} of 30 done ###############################")
             for key, value in valid_history.items(): print(f"############################### {key}: {value[-1]} ###############################")
             print("\n\n")
 
@@ -262,7 +259,6 @@ def train_model(train_data, valid_data, model_class, optimizer, criterion,
                 print(f"current validation F1 {F1.compute().item()} better than past validation F1 {best_validation_f1}. Saving this model.")
                 torch.save(model_class.model.state_dict(), output_model_path)
                 best_validation_f1 = F1.compute().item()
-
 
     # torch.save(model_class.model.state_dict(), output_model_path)
     pd.DataFrame(train_history).to_csv(train_history_path)
