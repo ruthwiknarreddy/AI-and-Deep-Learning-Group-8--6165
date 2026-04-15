@@ -1,5 +1,16 @@
 ./dataset/
-./healthy_disease/
-./output/
 ./alexnet_tf/
-./models/
+
+# Model weights — too large for GitHub (>100MB per file)
+*.pt
+*.pth
+*/models/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+~.pptx
