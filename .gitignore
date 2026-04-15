@@ -1,5 +1,6 @@
 ./dataset/
 ./healthy_disease/
+./disease_type/
 ./output/
 ./alexnet_tf/
 ./models/
