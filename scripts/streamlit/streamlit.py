@@ -192,12 +192,16 @@ with col2:
 
 st.divider()
 st.subheader("Results")
+
 if  predicted.squeeze().item() == 1: ## 1 means healthy
     st.write(f"Your plant is healthy with a confidence of {HD_prob.squeeze().item()*100:.2f}%")
 
 
 
 else:
+    plant, disease = classes[int(predicted.squeeze().item())].split(":")
     st.write(f"Your plant is diseased with a confidence of {(1 - HD_prob.squeeze().item())*100:.2f}%. Predicting Disease Status.")
-    st.write( f"Your plant has {classes[int(predicted.squeeze().item())]} with a confidence of {DT_prob*100:.2f}%")
+    st.write( f"Your plant is {plant} afflicted by {disease[1:]} with a confidence of {DT_prob*100:.2f}%")
+
+
 
