@@ -13,9 +13,16 @@ dependencies:
   - pip
   - graphviz
   - pip:
-    - jupyterlab-rise
-    - tensorflow
-    - seaborn
-    - pydot
-    - torchmetrics
-    - torchvision
+    - jupyterlab-rise==0.43.1
+    - seaborn==0.13.2
+    - pydot==4.0.1
+    - --no-deps opencv-python
+    - icrawler==0.6.10
+    - streamlit==1.55.0
+    - pillow==12.1.1
+    - huggingface_hub==1.8.0
+    - scikit-image==0.26.0
+    - --extra-index-url https://download.pytorch.org/whl/cu128
+    - torch==2.10.0
+    - torchmetrics==1.9.0
+    - torchvision==0.25.0
