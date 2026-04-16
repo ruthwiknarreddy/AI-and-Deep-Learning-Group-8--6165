@@ -27,6 +27,9 @@ transforms.v2.ToDtype(torch.float32, scale=True),
 transforms.v2.Normalize(mean, std)
 ])  
 
+#####################################################
+######################## App ########################
+#####################################################
 ## Title
 st.title("🌿 Plant Health Detector")
 st.markdown("Upload a leaf image to check if it's healthy or diseased.")
@@ -38,14 +41,20 @@ col1, col2 = st.columns(2)
 with col1:
     uploaded_file = st.file_uploader("Upload a plant image", type=["jpg", "jpeg", "png"])
 
+st.sidebar.title("About")
+st.sidebar.write("This model classifies plant disease.")
+
 
 
 if uploaded_file is not None:
     input_image = Image.open(uploaded_file).convert("RGB")
     ## display the image in the app
-    
+    with col2:
+        if uploaded_file:
+            st.image(input_image, caption = "Your input image.")
 
 else: 
+    st.write("Please upload a jpg, jpeg, png.")
     exit("Please upload a jpg, jpeg, png.")
 
 ## transform data
@@ -178,17 +187,7 @@ if  predicted.squeeze().item() == 0: ## Predict disease type
 
 
 
-########## APP ###########
-st.sidebar.title("About")
-st.sidebar.write("This model classifies plant disease.")
-
-
-
-
-with col2:
-    if uploaded_file:
-        st.image(input_image, caption = "Your input image.")
-
+########## Display Results ###########
 
 st.divider()
 st.subheader("Results")
