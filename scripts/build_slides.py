@@ -146,7 +146,7 @@ txt(s, "AlexNet  ·  GoogLeNet  ·  Grad-CAM Explainability  ·  Robustness Anal
 # Team section
 rect(s, 0.9, 4.0, 7.5, 0.85, R(0x1A, 0x48, 0x1A))
 rect(s, 0.9, 4.0, 0.06, 0.85, AMBER)
-txt(s, "Abeoseh Flomo   ·   Ruthwik Narreddy   ·   [Partner Name]",
+txt(s, "Abeoseh Flomo   ·   Ruthwik Narreddy   ·   Bhavana Vasireddy",
     1.05, 4.08, 7.2, 0.42, sz=15, bold=True, color=WARM_WHITE)
 txt(s, "DSBA 6165  ·  AI & Deep Learning  ·  University of North Carolina at Charlotte",
     1.05, 4.52, 7.2, 0.35, sz=11, color=SAGE_LIGHT, italic=True)
@@ -256,68 +256,68 @@ print("Slide 2: Problem & Motivation")
 # ══════════════════════════════════════════════════════════════════════════════
 s = prs.slides.add_slide(BLANK)
 rect(s, 0, 0, 13.33, 7.5, PARCHMENT)
-content_header(s, "Related Work", "Four foundational papers we build upon — and what we add beyond them")
+content_header(s, "Related Work", "Three papers that directly informed our dataset choices, architecture, and methodology")
 
 papers = [
     {
         "year": "2016", "authors": "Mohanty, Hughes & Salathé",
         "title": "Using Deep Learning for Image-Based Plant Disease Detection",
         "venue": "Frontiers in Plant Science",
-        "key":   "First major CNN study on PlantVillage. AlexNet & GoogLeNet achieved 99.35% accuracy with ImageNet transfer learning. Recommended 80/10/10 train/val/test split.",
-        "gap":   "No explainability (black box). No robustness testing. No field-condition evaluation.",
-        "adopt": "We replicate their architecture choices and adopt the 80/10/10 split recommendation.",
+        "key":   "First major CNN benchmark on PlantVillage (54,306 images). AlexNet & GoogLeNet achieved 99.35% accuracy with ImageNet transfer learning across 26 diseases and 14 crop species. Established the 80/10/10 train/val/test split as best practice.",
+        "gap":   "Black-box models — no explainability. No robustness testing under real-world image degradation.",
+        "adopt": "We directly replicate their AlexNet + GoogLeNet comparison and 80/10/10 split. We extend with Grad-CAM explainability and robustness analysis — both absent from their work.",
         "col":   FOREST_MID,
     },
     {
-        "year": "2018", "authors": "Ferentinos",
-        "title": "Deep Learning Models for Plant Disease Detection & Diagnosis",
-        "venue": "Computers & Electronics in Agriculture",
-        "key":   "Benchmarked 4 CNN architectures (AlexNet, VGG, Inception) on plant disease. Transfer learning consistently outperformed training from scratch. 88–99.53% accuracy range.",
-        "gap":   "No class-activation mapping. No failure-mode analysis. Single dataset.",
-        "adopt": "Validates our two-model comparison approach. Confirms transfer learning is the right strategy.",
+        "year": "2026", "authors": "Bhuria et al.",
+        "title": "AI-Powered Detection of Pumpkin Leaf Diseases Using DualFusion-CBAM-Stochastic",
+        "venue": "Frontiers in Plant Science",
+        "key":   "Fused DenseNet121 + EfficientNetB3 with a CBAM attention module on 2,000 pumpkin leaf images. Achieved ~96% accuracy. Demonstrated that attention-augmented CNN fusion improves fine-grained agricultural disease classification.",
+        "gap":   "Single crop (pumpkin) with no cross-dataset generalization. No XAI analysis or robustness evaluation.",
+        "adopt": "Motivated our inclusion of the pumpkin dataset and our multi-architecture comparison strategy. Validated the CNN approach for fine-grained multiclass disease detection.",
         "col":   EARTH_LIGHT,
     },
     {
-        "year": "2017", "authors": "Selvaraju et al.",
-        "title": "Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization",
-        "venue": "ICCV 2017",
-        "key":   "Introduced Gradient-weighted Class Activation Mapping. Uses gradient flow to the last conv layer to produce heatmaps without modifying network architecture. Model-agnostic.",
-        "gap":   "General CV method — never applied to plant pathology or agricultural AI.",
-        "adopt": "We implement Grad-CAM for both AlexNet & GoogLeNet with a PyTorch hook-based engine.",
+        "year": "2024", "authors": "Alshammari et al.",
+        "title": "An Improved Pear Disease Classification Using Cycle Generative Adversarial Network",
+        "venue": "Scientific Reports (Nature)",
+        "key":   "Applied CycleGAN for cross-domain data augmentation on the DiaMOS pear dataset. Compared VGG19, ResNet50, and EfficientNetB0. GAN-based augmentation improved classification accuracy by ~7% on average across architectures.",
+        "gap":   "GAN augmentation is computationally expensive. Scope limited to pear diseases — generalization not tested.",
+        "adopt": "Motivated our use of the DiaMOS pear dataset. Validated CNN-based multiclass classification on field-captured agricultural images beyond controlled lab settings.",
         "col":   BLUE_SOFT,
-    },
-    {
-        "year": "2019", "authors": "Hendrycks & Dietterich",
-        "title": "Benchmarking Neural Network Robustness to Common Corruptions",
-        "venue": "ICLR 2019",
-        "key":   "Defined ImageNet-C: 15 corruption types at 5 severities (noise, blur, weather, digital). Showed most CNNs are fragile under realistic distribution shifts.",
-        "gap":   "Focused on general object recognition — not applied to agricultural/domain-specific models.",
-        "adopt": "We adapt their corruption protocol (noise, blur, brightness, contrast, JPEG) for plant disease.",
-        "col":   RUST,
     },
 ]
 
-yp = 1.3
+BOX_H    = 1.88
+YP_STEP  = 1.97
+yp       = 1.32
 for p in papers:
-    rect(s, 0.28, yp, 12.77, 1.42, IVORY)
-    rect(s, 0.28, yp, 0.07,  1.42, p["col"])
-    rect(s, 0.28, yp, 12.77, 0.04, p["col"])
+    rect(s, 0.28, yp, 12.77, BOX_H, IVORY)
+    rect(s, 0.28, yp, 0.07,  BOX_H, p["col"])
+    rect(s, 0.28, yp, 12.77, 0.04,  p["col"])
 
     # year badge
-    rect(s, 0.4,  yp+0.08, 0.75, 0.5, p["col"])
-    txt(s, p["year"], 0.4, yp+0.08, 0.75, 0.5,
-        sz=16, bold=True, color=WARM_WHITE, align=PP_ALIGN.CENTER)
+    rect(s, 0.40, yp+0.09, 0.72, 0.52, p["col"])
+    txt(s, p["year"], 0.40, yp+0.09, 0.72, 0.52,
+        sz=14, bold=True, color=WARM_WHITE, align=PP_ALIGN.CENTER)
 
-    txt(s, p["title"], 1.25, yp+0.07, 7.9, 0.42, sz=13, bold=True, color=DARK_TEXT)
-    txt(s, f"{p['authors']}  ·  {p['venue']}", 1.25, yp+0.48, 7.9, 0.3,
+    # Left — title, authors, key finding
+    txt(s, p["title"], 1.25, yp+0.08, 7.8, 0.42, sz=13, bold=True, color=DARK_TEXT)
+    txt(s, f"{p['authors']}  ·  {p['venue']}", 1.25, yp+0.50, 7.8, 0.28,
         sz=10, italic=True, color=MID_TEXT)
+    txt(s, p["key"], 1.25, yp+0.82, 7.8, 0.98, sz=10, color=MID_TEXT)
 
-    rect(s, 9.3, yp+0.06, 3.65, 0.6, CREAM_CARD)
-    txt(s, "Gap:", 9.38, yp+0.07, 0.55, 0.25, sz=9, bold=True, color=RUST)
-    txt(s, p["gap"], 9.92, yp+0.07, 2.95, 0.55, sz=9, color=RUST, italic=True)
-    txt(s, "→ " + p["adopt"], 1.25, yp+0.8, 11.7, 0.48, sz=10, color=MID_TEXT, italic=True)
+    # Right — gap box
+    rect(s, 9.22, yp+0.08, 3.73, 0.82, CREAM_CARD)
+    txt(s, "Gap:", 9.30, yp+0.09, 0.55, 0.25, sz=9, bold=True, color=RUST)
+    txt(s, p["gap"], 9.85, yp+0.09, 3.0, 0.76, sz=9, color=RUST, italic=True)
 
-    yp += 1.52
+    # Right — what we did
+    rect(s, 9.22, yp+0.96, 3.73, 0.84, R(0xEA, 0xF5, 0xEA))
+    txt(s, "→ We:", 9.30, yp+0.97, 0.7, 0.25, sz=9, bold=True, color=FOREST)
+    txt(s, p["adopt"], 9.98, yp+0.97, 2.88, 0.78, sz=9, color=FOREST_SOFT, italic=True)
+
+    yp += YP_STEP
 print("Slide 3: Related Work")
 
 # ══════════════════════════════════════════════════════════════════════════════
