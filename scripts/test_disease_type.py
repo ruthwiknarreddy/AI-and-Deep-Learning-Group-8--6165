@@ -199,88 +199,92 @@ if __name__ == "__main__":
 
     label_df = pd.read_csv("./dataset/dataset_split.csv").loc[:,["files","disease_label"]].dropna(axis=0)
 
+    test_sizes = [".2", ".4", ".5", ".6", ".8"] ## train size: .8, .6, .5, .4, .2
 
+    with open("./dataset/disease_type_labels.pkl", "rb") as file:
+        classes = pickle.load(file)
 
     #### troubleshooting dataset with fewer instances ########
     # throwaway, label_df = train_test_split(label_df, test_size=0.1, stratify=label_df['disease_label'], random_state=0)
 
-    # train_df, temp_df = train_test_split(df_balanced, test_size=float(args.test_size), stratify=df_balanced['label_binary'], random_state=0)
-    train_df, temp_df = train_test_split(label_df, test_size=0.2, stratify=label_df['disease_label'], random_state=0)
-    val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df['disease_label'], random_state=0)
-
-
-    with open("./dataset/disease_type_labels.pkl", "rb") as file:
-        classes = pickle.load(file)
-    
-
-    #####################################
-    #### train the pretrained models ####
-    #####################################
-
-    #################
-    #### AlexNet ####
-    #################
-
-    #############################
-    ##### Full augmentation #####
-    #############################
-    mean = [0.485, 0.456, 0.406]
-    std  = [0.229, 0.224, 0.225]    
-
-
-    transform_valid = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    transforms.v2.Normalize(mean, std)
-    ])  
-
-    ### image generator
-    test = LoadDataset(test_df, classes, transform=transform_valid)
-
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    alexnet = AlexNet(retrain = True)
-    alexnet.model = alexnet.model.to(device)
-    alexnet.model.load_state_dict(torch.load("./disease_type/models/alexnet_model_test-size_.2.pt", map_location=torch.device(device)))
+    for test_size in test_sizes:
+        print(f"                           test/val:{test_size}")
+        # train_df, temp_df = train_test_split(df_balanced, test_size=float(args.test_size), stratify=df_balanced['label_binary'], random_state=0)
+        train_df, temp_df = train_test_split(label_df, test_size=float(test_size), stratify=label_df['disease_label'], random_state=0)
+        val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df['disease_label'], random_state=0)
 
 
 
+        
 
-    test_model(test_data = test, num_samples = test_df.shape[0], model_class = alexnet, 
-                test_history_path = f"./disease_type/output/train_test_results/alexnet_test_history_test-size_.2.csv")
+        #####################################
+        #### train the pretrained models ####
+        #####################################
+
+        #################
+        #### AlexNet ####
+        #################
+
+        #############################
+        ##### Full augmentation #####
+        #############################
+        mean = [0.485, 0.456, 0.406]
+        std  = [0.229, 0.224, 0.225]    
 
 
-    
+        transform_valid = v2.Compose([
+        transforms.v2.Resize((224, 224)),
+        transforms.v2.ToImage(),
+        transforms.v2.ToDtype(torch.float32, scale=True),
+        transforms.v2.Normalize(mean, std)
+        ])  
+
+        ### image generator
+        test = LoadDataset(test_df, classes, transform=transform_valid)
 
 
-    ########################################
-    #### GoogLeNet aka InceptionNet V1. ####
-    ########################################
-
-    #############################
-    ##### Full augmentation #####
-    #############################
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        alexnet = AlexNet(retrain = True)
+        alexnet.model = alexnet.model.to(device)
+        alexnet.model.load_state_dict(torch.load(f"./disease_type/models/alexnet_model_test-size_{test_size}.pt", map_location=torch.device(device)))
 
 
 
-    transform_valid = v2.Compose([
-    transforms.v2.Resize((224, 224)),
-    transforms.v2.ToImage(),
-    transforms.v2.ToDtype(torch.float32, scale=True),
-    ])  
 
-    ### image generator
-    test = LoadDataset(test_df, classes = classes, transform=transform_valid)
+        test_model(test_data = test, num_samples = test_df.shape[0], model_class = alexnet, 
+                    test_history_path = f"./disease_type/output/train_test_results/alexnet_test_history_test-size_{test_size}.csv")
 
-    googlenet = GoogLeNet(retrain = True)
-    googlenet.model = googlenet.model.to(device)
-    googlenet.model.load_state_dict(torch.load("./disease_type/models/googlenet_model_test-size_.2.pt", map_location=torch.device(device)))
 
-    criterion = nn.BCEWithLogitsLoss() ## loss
+        
 
-    
-    test_model(test_data = test, num_samples = test_df.shape[0], model_class = googlenet, 
-                test_history_path = f"./disease_type/output/train_test_results/googlenet_test_history_test-size_.2.csv")
+
+        ########################################
+        #### GoogLeNet aka InceptionNet V1. ####
+        ########################################
+
+        #############################
+        ##### Full augmentation #####
+        #############################
+
+
+
+        transform_valid = v2.Compose([
+        transforms.v2.Resize((224, 224)),
+        transforms.v2.ToImage(),
+        transforms.v2.ToDtype(torch.float32, scale=True),
+        ])  
+
+        ### image generator
+        test = LoadDataset(test_df, classes = classes, transform=transform_valid)
+
+        googlenet = GoogLeNet(retrain = True)
+        googlenet.model = googlenet.model.to(device)
+        googlenet.model.load_state_dict(torch.load(f"./disease_type/models/googlenet_model_test-size_{test_size}.pt", map_location=torch.device(device)))
+
+        criterion = nn.BCEWithLogitsLoss() ## loss
+
+        
+        test_model(test_data = test, num_samples = test_df.shape[0], model_class = googlenet, 
+                    test_history_path = f"./disease_type/output/train_test_results/googlenet_test_history_test-size_{test_size}.csv")
 
 
